@@ -7,6 +7,12 @@ from shopease.models import Order, InstallmentPlan, OrderTracking, BNPLInstallme
 from django.db.models import Sum
 from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.core.exceptions import ValidationError
+from django.db.models import Q
+from .models import CustomUser
+from django.views.decorators.csrf import ensure_csrf_cookie
+from django.contrib.auth.hashers import check_password
+from django.contrib.auth import get_user_model
+from django.contrib.auth.backends import ModelBackend
 
 def register_view(request):
     if request.method == 'POST':
@@ -30,16 +36,29 @@ def account(request):
     
     return render(request, 'account.html')
 
+@ensure_csrf_cookie
 def login_view(request):
     if request.method == 'POST':
-        email = request.POST.get('email')
+        login_id = request.POST.get('username')
         password = request.POST.get('password')
-        user = authenticate(request, username=email, password=password)
-        if user is not None:
-            login(request, user)
-            return redirect('home')  # or wherever you want to redirect after login
-        else:
-            messages.error(request, 'Invalid email or password.')
+        
+        try:
+            # Try to find the user
+            user = CustomUser.objects.filter(
+                Q(username__iexact=login_id) | Q(email__iexact=login_id)
+            ).first()
+            
+            if user and user.check_password(password):
+                # Specify the authentication backend
+                login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+                messages.success(request, 'You have successfully logged in!')
+                return redirect('shopease:index')
+            else:
+                messages.error(request, 'Invalid credentials.')
+                
+        except Exception as e:
+            messages.error(request, f'Login error: {str(e)}')
+    
     return render(request, 'login.html')
 
 @login_required

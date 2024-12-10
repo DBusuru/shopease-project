@@ -5,111 +5,318 @@
 {% block title %}Login{% endblock %}
 
 {% block content %}
-<div class="section">
-    <div class="container">
-        <div class="row justify-content-center">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h2 class="text-center mb-4">Login</h2>
-                        
-                        {% if messages %}
-                            {% for message in messages %}
-                                <div class="alert alert-{{ message.tags }}">
-                                    {{ message }}
-                                </div>
-                            {% endfor %}
-                        {% endif %}
+<div class="login-container">
+    <div class="login-box">
+        <div class="login-left">
+            <div class="welcome-text">
+                <h1>Welcome Back</h1>
+                <p>Shop with confidence and style</p>
+            </div>
+            <img src="{% static 'img/shopping-illustration.svg' %}" alt="Shopping" class="login-illustration">
+        </div>
+        
+        <div class="login-right">
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} fade show">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
 
-                        <form method="post">
-                            {% csrf_token %}
-                            
-                            <div class="form-group mb-3">
-                                <label for="id_username">Email</label>
-                                <input type="email" name="username" class="form-control" id="id_username" required>
-                            </div>
-                            
-                            <div class="form-group mb-3">
-                                <label for="id_password">Password</label>
-                                <input type="password" name="password" class="form-control" id="id_password" required>
-                            </div>
-                            
-                            <div class="d-grid gap-2">
-                                <button type="submit" class="primary-btn">Login</button>
-                            </div>
-                        </form>
-                        
-                        <div class="text-center mt-3">
-                            <p>Don't have an account? <a href="{% url 'users:register' %}">Register here</a></p>
-                            <p><a href="{% url 'users:password_reset' %}">Forgot your password?</a></p>
-                        </div>
-                        
-                        <div class="text-center mt-4">
-                            <p class="mb-2">Or login with:</p>
-                            <a href="{% provider_login_url 'google' %}" class="btn btn-outline-dark">
-                                <i class="fab fa-google"></i> Google
-                            </a>
-                        </div>
+            <form method="post" class="login-form">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <div class="input-wrapper">
+                        <i class="fas fa-user"></i>
+                        <input type="text" name="username" placeholder="Email or Username" required>
                     </div>
                 </div>
-            </div>
+                
+                <div class="form-group">
+                    <div class="input-wrapper">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" name="password" id="password" placeholder="Password" required>
+                        <i class="fas fa-eye password-toggle" onclick="togglePassword()"></i>
+                    </div>
+                </div>
+                
+                <button type="submit" class="login-btn">Sign In</button>
+                
+                <div class="social-divider">
+                    <span>or</span>
+                </div>
+                
+                <a href="{% provider_login_url 'google' %}" class="google-btn">
+                    
+                    Continue with Google
+                </a>
+                
+                <div class="login-footer">
+                    <a href="{% url 'users:password_reset' %}" class="forgot-password">Forgot Password?</a>
+                    <p>Don't have an account? <a href="{% url 'users:register' %}">Sign Up</a></p>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
 <style>
-    .card {
-        border: none;
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-        margin-top: 2rem;
-        margin-bottom: 2rem;
+    .login-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+        padding: 20px;
     }
-    .card-body {
-        padding: 2rem;
+
+    .login-box {
+        display: flex;
+        background: white;
+        border-radius: 20px;
+        overflow: hidden;
+        width: 1000px;
+        box-shadow: 0 20px 40px rgba(209, 0, 36, 0.1);
     }
-    .primary-btn {
-        background: #D10024;
-        color: #FFF;
-        border: none;
-        padding: 12px;
+
+    .login-left {
+        flex: 1;
+        background: linear-gradient(45deg, #D10024, #FF1744);
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        color: white;
+        text-align: center;
+    }
+
+    .welcome-text h1 {
+        font-size: 2.5rem;
         font-weight: 700;
-        text-transform: uppercase;
-        width: 100%;
+        margin-bottom: 10px;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .primary-btn:hover {
+
+    .welcome-text p {
+        font-size: 1.1rem;
         opacity: 0.9;
     }
-    .form-control {
-        padding: 10px 15px;
-        border: 1px solid #E4E7ED;
-        border-radius: 3px;
+
+    .login-illustration {
+        width: 80%;
+        margin-top: 40px;
+        filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
     }
-    .form-control:focus {
-        border-color: #D10024;
-        box-shadow: none;
+
+    .login-right {
+        flex: 1;
+        padding: 40px;
     }
-    label {
+
+    .login-form {
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .input-wrapper {
+        position: relative;
+        background: #F3F4F6;
+        border-radius: 10px;
+        padding: 15px 20px;
+        display: flex;
+        align-items: center;
+        transition: all 0.3s ease;
+    }
+
+    .input-wrapper:focus-within {
+        background: white;
+        box-shadow: 0 0 0 2px #D10024;
+    }
+
+    .input-wrapper i {
+        color: #D10024;
+        font-size: 1.2rem;
+        margin-right: 12px;
+    }
+
+    .input-wrapper input {
+        border: none;
+        background: none;
+        outline: none;
+        flex: 1;
+        font-size: 1rem;
         color: #2B2D42;
+    }
+
+    .input-wrapper input::placeholder {
+        color: #9CA3AF;
+    }
+
+    .password-toggle {
+        cursor: pointer;
+        margin-left: 12px;
+    }
+
+    .login-btn {
+        width: 100%;
+        padding: 15px;
+        background: #D10024;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .login-btn:hover {
+        background: #A5001D;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(209, 0, 36, 0.2);
+    }
+
+    .social-divider {
+        text-align: center;
+        margin: 20px 0;
+        position: relative;
+    }
+
+    .social-divider::before,
+    .social-divider::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        width: 45%;
+        height: 1px;
+        background: #E4E7ED;
+    }
+
+    .social-divider::before { left: 0; }
+    .social-divider::after { right: 0; }
+
+    .social-divider span {
+        background: white;
+        padding: 0 15px;
+        color: #2B2D42;
+    }
+
+    .google-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        padding: 15px;
+        border: 2px solid #E4E7ED;
+        border-radius: 10px;
+        font-size: 1rem;
+        color: #2B2D42;
+        text-decoration: none;
+        transition: all 0.3s ease;
         font-weight: 500;
-        margin-bottom: 0.5rem;
     }
-    .btn-outline-dark {
-        border: 1px solid #E4E7ED;
-        padding: 8px 20px;
-        transition: all 0.3s;
-    }
-    .btn-outline-dark:hover {
-        background-color: #f8f9fa;
+
+    .google-btn:hover {
         border-color: #D10024;
+        background: #F8F9FA;
         color: #D10024;
     }
-    a {
+
+    .google-btn img {
+        width: 20px;
+        margin-right: 10px;
+    }
+
+    .login-footer {
+        margin-top: 20px;
+        text-align: center;
+        color: #2B2D42;
+    }
+
+    .login-footer a {
         color: #D10024;
         text-decoration: none;
+        font-weight: 500;
+        transition: all 0.3s ease;
     }
-    a:hover {
+
+    .login-footer a:hover {
         color: #A5001D;
         text-decoration: underline;
     }
+
+    .forgot-password {
+        display: block;
+        margin-bottom: 10px;
+    }
+
+    .alert {
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        border: none;
+    }
+
+    .alert-success {
+        background-color: #d4edda;
+        color: #155724;
+    }
+
+    .alert-error {
+        background-color: #f8d7da;
+        color: #721c24;
+    }
+
+    @media (max-width: 768px) {
+        .login-box {
+            flex-direction: column;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-left {
+            padding: 30px;
+        }
+
+        .welcome-text h1 {
+            font-size: 2rem;
+        }
+
+        .login-illustration {
+            width: 60%;
+            margin-top: 20px;
+        }
+
+        .login-right {
+            padding: 30px;
+        }
+    }
 </style>
+
+<script>
+function togglePassword() {
+    const password = document.getElementById('password');
+    const icon = document.querySelector('.password-toggle');
+    
+    if (password.type === 'password') {
+        password.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        password.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+</script>
 {% endblock %}
+

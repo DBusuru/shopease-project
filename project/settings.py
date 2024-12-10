@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'allauth.socialaccount',
     'allauth.socialaccount.providers.google',
     'django.contrib.humanize',
+    'widget_tweaks',
 ]
 
 AUTH_USER_MODEL = 'users.CustomUser'
@@ -191,7 +192,7 @@ else:
     EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
     DEFAULT_FROM_EMAIL = os.getenv('EMAIL_HOST_USER')
-    ADMIN_EMAIL = 'admin@gmail.com'
+    ADMIN_EMAIL = os.getenv('ADMIN_EMAIL')
 
 # Django-allauth settings
 ACCOUNT_EMAIL_VERIFICATION = 'none'  # Change to 'none' for development
