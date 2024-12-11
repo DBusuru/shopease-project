@@ -186,21 +186,19 @@
 
                 <!-- Cart -->
                 <div class="dropdown">
-                  <a class="dropdown-toggle" data-toggle="dropdown" aria-expanded="true">
-                    <a href="{% url 'shopping_cart:cart_detail' %}" class="nav-link">
-                      <i class="fa fa-shopping-cart"></i>
-                      <span>Your Cart</span>
-                      {% with total_items=cart|length|default:0 %}
-                          {% if total_items > 0 %}
-                              <div class="qty">{{ total_items }}</div>
-                          {% endif %}
-                      {% endwith %}
-                    </a>
+                  <a class="dropdown-toggle nav-link" data-toggle="dropdown" aria-expanded="true" href="{% url 'shopping_cart:cart_detail' %}">
+                    <i class="fa fa-shopping-cart"></i>
+                    <span>Your Cart</span>
+                    {% with total_items=cart_items.count|default:0 %}
+                        {% if total_items > 0 %}
+                            <div class="qty">{{ total_items }}</div>
+                        {% endif %}
+                    {% endwith %}
                   </a>
                   <div class="cart-dropdown">
                     <div class="cart-list">
-                      {% if cart %}
-                          {% for item in cart %}
+                      {% if cart_items %}
+                          {% for item in cart_items %}
                               <div class="product-widget">
                                   <div class="product-img">
                                       {% if item.product.image %}
@@ -211,18 +209,16 @@
                                   </div>
                                   <div class="product-body">
                                       <h3 class="product-name">
-                                          <a href="#">{{ item.product.name|default:"Product" }}</a>
+                                          <a href="#">{{ item.product.name }}</a>
                                       </h3>
                                       <h4 class="product-price">
-                                          <span class="qty">{{ item.quantity }}x</span>KES {{ item.price|floatformat:2 }}
+                                          <span class="qty">{{ item.quantity }}x</span>KES {{ item.product.price|floatformat:2 }}
                                       </h4>
                                   </div>
-                                  {% if item.product_id %}
-                                      <form method="post" action="{% url 'shopping_cart:remove_from_cart' item.product_id %}" style="display: inline;">
-                                          {% csrf_token %}
-                                          <button type="submit" class="delete"><i class="fa fa-close"></i></button>
-                                      </form>
-                                  {% endif %}
+                                  <form method="post" action="{% url 'shopping_cart:remove_from_cart' item.id %}" style="display: inline;">
+                                      {% csrf_token %}
+                                      <button type="submit" class="delete"><i class="fa fa-close"></i></button>
+                                  </form>
                               </div>
                           {% endfor %}
                       {% else %}
@@ -231,12 +227,12 @@
                     </div>
                     <div class="cart-summary">
                       <small>
-                        {% with total_items=cart|length %}
+                        {% with total_items=cart_items.count|default:0 %}
                             {{ total_items }} Item(s) selected
                         {% endwith %}
                       </small>
                       <h5>
-                        SUBTOTAL: KES {{ cart.get_total_price|floatformat:2 }}
+                        SUBTOTAL: KES {{ total|floatformat:2 }}
                       </h5>
                     </div>
                     <div class="cart-btns">
@@ -362,7 +358,7 @@
                                 <a href="{% url 'users:account_dashboard' %}">
                                     <i class="fa fa-dashboard"></i> Dashboard
                                 </a>
-                                <a href="{% url 'shopease:view_cart' %}">
+                                <a href="{% url 'shopping_cart:cart_detail' %}">
                                     <i class="fa fa-shopping-cart"></i> Cart
                                 </a>
                                 <a href="{% url 'shopease:wishlist' %}">

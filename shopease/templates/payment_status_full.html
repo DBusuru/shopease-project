@@ -9,14 +9,8 @@
                     <h3 class="card-title mb-4">Payment in Progress</h3>
                     
                     <div class="alert alert-info">
-                        {% if installment_number %}
-                            <h5>Installment {{ installment_number }} of {{ total_installments }}</h5>
-                            <p class="mb-0">Monthly Payment: KES {{ amount|floatformat:2 }}</p>
-                            <small class="text-muted d-block mt-2">Total Order Amount: KES {{ total_amount|floatformat:2 }}</small>
-                        {% else %}
-                            <h5>Full Payment</h5>
-                            <p class="mb-0">Amount: KES {{ amount|floatformat:2 }}</p>
-                        {% endif %}
+                        <h5>Payment Amount</h5>
+                        <p class="mb-0">Amount: KES {{ amount|floatformat:2 }}</p>
                     </div>
                     
                     <div class="my-4">
@@ -32,7 +26,7 @@
 </div>
 
 <script>
-// Redirect to thank you page after 5 seconds
+// Wait 5 seconds then redirect to thank you page
 setTimeout(() => {
     window.location.href = "{% url 'shopease:thank_you' %}";
 }, 5000);

@@ -84,33 +84,33 @@
 									<div class="products-slick" data-nav="#slick-nav-1">
 										{% for product in new_products %}
 										<div class="product">
-											<div class="product-img">
-												{% if product.image %}
-													<img src="{{ product.image.url }}" alt="{{ product.name }}">
-												{% endif %}
-												{% if product.discount %}
-												<div class="product-label">
-													<span class="sale">-{{ product.discount }}%</span>
-												</div>
-												{% endif %}
-											</div>
-											<div class="product-body">
-												<p class="product-category">{{ product.category.name }}</p>
-												<h3 class="product-name">
-													<a href="{% url 'shopease:product_detail' product.id %}">{{ product.name }}</a>
-												</h3>
-												<h4 class="product-price">
-													KES {{ product.price|floatformat:2 }}
-													{% if product.old_price %}
-														<del class="product-old-price">KES {{ product.old_price|floatformat:2 }}</del>
+											<a href="{% url 'shopease:product_detail' product.id %}" style="text-decoration: none; color: inherit;">
+												<div class="product-img">
+													{% if product.image %}
+														<img src="{{ product.image.url }}" alt="{{ product.name }}">
 													{% endif %}
-												</h4>
-												<div class="product-rating">
-													{% for i in "12345"|make_list %}
-														<i class="fa fa-star{% if forloop.counter > product.rating|default:0 %}-o{% endif %}"></i>
-													{% endfor %}
+													{% if product.discount %}
+													<div class="product-label">
+														<span class="sale">-{{ product.discount }}%</span>
+													</div>
+													{% endif %}
 												</div>
-											</div>
+												<div class="product-body">
+													<p class="product-category">{{ product.category.name }}</p>
+													<h3 class="product-name">{{ product.name }}</h3>
+													<h4 class="product-price">
+														KES {{ product.price|floatformat:2 }}
+														{% if product.old_price %}
+															<del class="product-old-price">KES {{ product.old_price|floatformat:2 }}</del>
+														{% endif %}
+													</h4>
+													<div class="product-rating">
+														{% for i in "12345"|make_list %}
+															<i class="fa fa-star{% if forloop.counter > product.rating|default:0 %}-o{% endif %}"></i>
+														{% endfor %}
+													</div>
+												</div>
+											</a>
 											<div class="add-to-cart">
 												<form method="POST" action="{% url 'shopease:add_to_cart' product.id %}">
 													{% csrf_token %}
@@ -203,33 +203,33 @@
 									<div class="products-slick" data-nav="#slick-nav-2">
 										{% for product in top_selling %}
 										<div class="product">
-											<div class="product-img">
-												{% if product.image %}
-													<img src="{{ product.image.url }}" alt="{{ product.name }}">
-												{% endif %}
-												{% if product.discount %}
-												<div class="product-label">
-													<span class="sale">-{{ product.discount }}%</span>
-												</div>
-												{% endif %}
-											</div>
-											<div class="product-body">
-												<p class="product-category">{{ product.category.name }}</p>
-												<h3 class="product-name">
-													<a href="{% url 'shopease:product_detail' product.id %}">{{ product.name }}</a>
-												</h3>
-												<h4 class="product-price">
-													KES {{ product.price|floatformat:2 }}
-													{% if product.old_price %}
-														<del class="product-old-price">KES {{ product.old_price|floatformat:2 }}</del>
+											<a href="{% url 'shopease:product_detail' product.id %}" style="text-decoration: none; color: inherit;">
+												<div class="product-img">
+													{% if product.image %}
+														<img src="{{ product.image.url }}" alt="{{ product.name }}">
 													{% endif %}
-												</h4>
-												<div class="product-rating">
-													{% for i in "12345"|make_list %}
-														<i class="fa fa-star{% if forloop.counter > product.rating|default:0 %}-o{% endif %}"></i>
-													{% endfor %}
+													{% if product.discount %}
+													<div class="product-label">
+														<span class="sale">-{{ product.discount }}%</span>
+													</div>
+													{% endif %}
 												</div>
-											</div>
+												<div class="product-body">
+													<p class="product-category">{{ product.category.name }}</p>
+													<h3 class="product-name">{{ product.name }}</h3>
+													<h4 class="product-price">
+														KES {{ product.price|floatformat:2 }}
+														{% if product.old_price %}
+															<del class="product-old-price">KES {{ product.old_price|floatformat:2 }}</del>
+														{% endif %}
+													</h4>
+													<div class="product-rating">
+														{% for i in "12345"|make_list %}
+															<i class="fa fa-star{% if forloop.counter > product.rating|default:0 %}-o{% endif %}"></i>
+														{% endfor %}
+													</div>
+												</div>
+											</a>
 											<div class="add-to-cart">
 												<form method="POST" action="{% url 'shopease:add_to_cart' product.id %}">
 													{% csrf_token %}

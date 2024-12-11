@@ -18,7 +18,7 @@
                         <h3>Order Details</h3>
                         <p>Order Number: #{{ order.id }}</p>
                         <p>Date: {{ order.created_at|date:"F j, Y" }}</p>
-                        <p>Total Amount: ${{ order.total_amount }}</p>
+                        <p>Total Amount: KES {{ order.total_amount }}</p>
                         
                         <div class="order-items">
                             <h4>Items Ordered:</h4>
@@ -32,18 +32,12 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {% for item in order.orderitem_set.all %}
+                                    {% for item in order.items.all %}
                                     <tr>
-                                        <td>
-                                            {{ item.product.name }}
-                                            {% if item.variant %}
-                                            <br>
-                                            <small>{{ item.variant.name }}</small>
-                                            {% endif %}
-                                        </td>
+                                        <td>{{ item.product.name }}</td>
                                         <td>{{ item.quantity }}</td>
-                                        <td>${{ item.price }}</td>
-                                        <td>${{ item.get_total }}</td>
+                                        <td>KES {{ item.price }}</td>
+                                        <td>KES {{ item.get_total }}</td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -64,7 +58,7 @@
                     <div class="next-steps">
                         <p>We'll send you an email confirmation shortly with your order details.</p>
                         <div class="buttons">
-                            <a href="{% url 'shopease:home' %}" class="primary-btn">Continue Shopping</a>
+                            <a href="{% url 'shopease:index' %}" class="primary-btn">Continue Shopping</a>
                             {% if order %}
                             <a href="#" onclick="window.print()" class="secondary-btn">Print Order</a>
                             {% endif %}

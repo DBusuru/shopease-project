@@ -62,7 +62,6 @@
                                 <form method="post" action="{% url 'shopease:process_installment' %}" class="text-center">
                                     {% csrf_token %}
                                     <input type="hidden" name="months" value="{{ plan.months }}">
-                                    <input type="hidden" name="monthly_payment" value="{{ plan.monthly_payment }}">
                                     <button type="submit" class="btn btn-primary w-100">Select Plan</button>
                                 </form>
                             </div>

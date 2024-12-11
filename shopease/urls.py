@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from . import views
 app_name = 'shopease'  # Add this namespace
 urlpatterns = [
@@ -10,7 +10,6 @@ urlpatterns = [
         path('accessories/', views.accessories, name='accessories'),
         path('search/', views.search_products, name='search_products'),
         path('wishlist/', views.wishlist, name='wishlist'),
-        path('cart/', views.view_cart, name='view_cart'),
         path('checkout/', views.checkout, name='checkout'),
         path('product/', views.product_list, name='product'),
         path('product/<int:product_id>/', views.product_detail, name='product_detail'),
@@ -22,7 +21,6 @@ urlpatterns = [
         path('mpesa/initiate/', views.initiate_mpesa, name='initiate_mpesa'),
         path('mpesa/callback/', views.mpesa_callback, name='mpesa_callback'),
         path('product/<int:product_id>/wishlist/', views.toggle_wishlist, name='toggle_wishlist'),
-        path('cart/', views.cart_detail, name='cart_detail'),
         path('wishlist/toggle/<int:product_id>/', views.toggle_wishlist, name='toggle_wishlist'),
         path('add-to-cart/<int:product_id>/', views.add_to_cart, name='add_to_cart'),
         path('my-orders/', views.my_orders, name='my_orders'),
@@ -37,7 +35,6 @@ urlpatterns = [
         path('cart/update/<int:item_id>/', views.update_cart_item, name='update_cart_item'),
         path('cart/remove/<int:item_id>/', views.remove_cart_item, name='remove_cart_item'),
         path('wishlist/add/<int:product_id>/', views.add_to_wishlist, name='add_to_wishlist'),
-        path('cart/', views.cart_view, name='cart'),
         path('update-cart/<int:item_id>/', views.update_cart, name='update_cart'),
         path('remove-from-cart/<int:item_id>/', views.remove_from_cart, name='remove_from_cart'),
         path('initiate-bnpl/', views.initiate_bnpl, name='initiate_bnpl'),
@@ -53,4 +50,7 @@ urlpatterns = [
         path('mpesa/status/<str:checkout_request_id>/', views.check_payment_status, name='check_payment_status'),
         path('payment/status/', views.payment_status, name='payment_status'),
         path('payment/', views.payment_processing, name='payment'),
+        path('accounts/', include('allauth.urls')),
+        path('thank-you/', views.thank_you, name='thank_you'),
+        path('payment/status/full/', views.payment_status_full, name='payment_status_full'),
 ]

@@ -2,10 +2,11 @@ from django.db import migrations, models
 from django.forms import ValidationError
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
+from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.http import require_POST
+from django.urls import reverse
 import json
 from django.core.validators import validate_email
 
@@ -88,9 +89,32 @@ def checkout(request):
     # Calculate total
     total = sum(item.quantity * item.product.price for item in cart_items)
     
+    # Handle payment type selection
+    payment_type = request.GET.get('payment_type')
+    
+    if payment_type == 'full':
+        # Store total amount in session for payment status
+        request.session['amount'] = str(total)
+        request.session['is_installment'] = False
+        return redirect('shopease:payment_status_full')
+    elif payment_type == 'installment':
+        # Calculate monthly installment
+        monthly_installment = total / 6
+        request.session['is_installment'] = True
+        request.session['monthly_payment'] = str(monthly_installment)
+        request.session['total_amount'] = str(total)
+        request.session['total_installments'] = 6
+        request.session['installment_number'] = 1
+        request.session['amount'] = str(monthly_installment)
+        return redirect('shopease:select_installment_plan')
+    
+    # Calculate monthly installment for display
+    monthly_installment = total / 6
+    
     context = {
         'cart_items': cart_items,
         'total': total,
+        'monthly_installment': monthly_installment,
     }
     
     return render(request, 'checkout.html', context)
@@ -190,14 +214,23 @@ def update_cart_quantity(request, item_id):
 @login_required
 @require_POST
 def remove_from_cart(request, item_id):
-    # Get the user's cart
-    cart = Cart.objects.get(user=request.user)
-    
-    # Get the cart item using the cart relationship
-    cart_item = get_object_or_404(CartItem, id=item_id, cart=cart)
-    cart_item.delete()
-    
-    return redirect('shopease:view_cart')
+    try:
+        cart_item = get_object_or_404(CartItem, id=item_id, cart__user=request.user)
+        cart = cart_item.cart
+        cart_item.delete()
+        
+        # Calculate new cart total using CartItem.objects.filter instead of cart.items.all()
+        total = sum(item.product.price * item.quantity for item in CartItem.objects.filter(cart=cart))
+        
+        return JsonResponse({
+            'success': True,
+            'cart_total': float(total)
+        })
+    except CartItem.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'message': 'Item not found'
+        }, status=404)
 
 @login_required
 @require_POST
@@ -217,6 +250,7 @@ def add_to_cart(request, product_id):
             
         except Product.DoesNotExist:
             messages.error(request, "Product not found.")
+            return redirect('shopping_cart:cart_detail')
         except Exception as e:
             messages.error(request, f"Error adding product to cart: {str(e)}")
     
@@ -224,9 +258,9 @@ def add_to_cart(request, product_id):
 
 @login_required
 def wishlist(request):
-    wishlist_items = WishlistItem.objects.filter(user=request.user)
+    wishlist, created = Wishlist.objects.get_or_create(user=request.user)
     context = {
-        'wishlist_items': wishlist_items
+        'wishlist_items': wishlist.products.all()
     }
     return render(request, 'wishlist.html', context)
 
@@ -237,21 +271,13 @@ def add_to_wishlist(request, product_id):
         wishlist, created = Wishlist.objects.get_or_create(user=request.user)
         
         if wishlist.products.filter(id=product_id).exists():
-            return JsonResponse({
-                'success': False,
-                'message': 'Product is already in your wishlist.'
-            })
-        
-        wishlist.products.add(product)
-        return JsonResponse({
-            'success': True,
-            'message': f"{product.name} has been added to your wishlist."
-        })
+            messages.warning(request, 'Product is already in your wishlist.')
+        else:
+            wishlist.products.add(product)
+            messages.success(request, f"{product.name} has been added to your wishlist.")
     
-    return JsonResponse({
-        'success': False,
-        'message': 'Invalid request method.'
-    })
+    # Redirect back to the previous page
+    return redirect(request.META.get('HTTP_REFERER', 'shopease:product_list'))
 
 @login_required
 def remove_from_wishlist(request, item_id):
@@ -334,15 +360,31 @@ def process_checkout(request):
     return redirect('shopease:checkout')
 
 @login_required
-def thank_you(request, order_id=None):
-    # Get the order if order_id is provided
-    order = None
-    if order_id:
-        order = get_object_or_404(Order, id=order_id, user=request.user)
+def thank_you(request):
+    try:
+        # Get the latest order for this user
+        order = Order.objects.filter(user=request.user).latest('created_at')
+        
+        # Clear the cart items first
+        CartItem.objects.filter(cart__user=request.user).delete()
+        
+        # Then delete the cart itself
+        Cart.objects.filter(user=request.user).delete()
+        
+        messages.success(request, 'Thank you for your order! Your cart has been cleared.')
+        
+        context = {
+            'order': order
+        }
+        
+    except Order.DoesNotExist:
+        messages.warning(request, 'No order found.')
+        context = {}
+    except Exception as e:
+        logger.error(f"Error in thank_you view: {str(e)}")
+        messages.error(request, 'There was an error processing your order.')
+        context = {}
     
-    context = {
-        'order': order,
-    }
     return render(request, 'thank_you.html', context)
 
 def search_products(request):
@@ -404,10 +446,15 @@ def smartphones(request):
         elif sort == 'name_asc':
             products = products.order_by('name')
             
-        # Pagination
-        paginator = Paginator(products, 12)  # Show 12 products per page
+        # Pagination - show 10 products per page
+        paginator = Paginator(products, 10)  # Changed from 12 to 10
         page = request.GET.get('page')
-        products = paginator.get_page(page)
+        try:
+            products = paginator.get_page(page)
+        except PageNotAnInteger:
+            products = paginator.get_page(1)
+        except EmptyPage:
+            products = paginator.get_page(paginator.num_pages)
         
         context = {
             'products': products,
@@ -416,7 +463,10 @@ def smartphones(request):
             'selected_sort': sort,
             'subcategories': subcategories,
             'selected_subcategory': selected_subcategory,
-            'main_category': smartphones_category
+            'main_category': smartphones_category,
+            'total_products': paginator.count,
+            'current_page': products.number,
+            'total_pages': paginator.num_pages
         }
         return render(request, 'smartphones.html', context)
         
@@ -642,86 +692,97 @@ def add_review(request, product_id):
 @login_required
 @require_POST
 def initiate_mpesa(request):
-    try:
+    if request.method == 'POST':
         phone_number = request.POST.get('phone_number')
-        # Calculate total from cart items
-        cart_items = CartItem.objects.filter(user=request.user)
-        amount = sum(item.total_price for item in cart_items)
-        
-        if not phone_number or not amount:
-            return JsonResponse({
-                'success': False,
-                'message': 'Phone number and amount are required'
-            })
+        if not phone_number:
+            messages.error(request, 'Phone number is required')
+            return redirect('shopease:checkout')
             
-        # Format phone number (remove leading 0 and add country code if needed)
+        # Format phone number if needed
         if phone_number.startswith('0'):
             phone_number = '254' + phone_number[1:]
         elif not phone_number.startswith('254'):
             phone_number = '254' + phone_number
             
-        reference = f"ORDER-{request.user.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
-        description = f"Payment for order by {request.user.email}"
+        # Get cart total
+        cart = Cart.objects.get(user=request.user)
+        cart_items = CartItem.objects.filter(cart=cart)
+        total_amount = sum(item.quantity * item.product.price for item in cart_items)
         
         # Initialize M-PESA client
         mpesa_client = MpesaClient()
         
+        # Generate reference number
+        reference = f"ORDER-{request.user.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+        
         # Initiate STK push
-        response = mpesa_client.initiate_stk_push(
+        response = mpesa_client.stk_push(
             phone_number=phone_number,
-            amount=amount,
-            reference=reference,
-            description=description
+            amount=int(total_amount),
+            reference=reference
         )
         
-        # Save payment record
-        payment = MpesaPayment.objects.create(
-            user=request.user,
-            transaction_id=response.get('CheckoutRequestID'),
-            phone_number=phone_number,
-            amount=amount,
-            reference=reference,
-            description=description
-        )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Please check your phone to complete the payment',
-            'transaction_id': payment.transaction_id
-        })
-        
-    except Exception as e:
-        logger.error(f"Error processing M-PESA payment: {str(e)}")
-        return JsonResponse({
-            'success': False,
-            'message': 'An error occurred while processing your payment'
-        })
+        if response.get('success'):
+            # Store payment details in session
+            request.session['amount'] = str(total_amount)
+            request.session['mpesa_transaction_id'] = response.get('checkout_request_id')
+            request.session['is_installment'] = False
+            
+            # Redirect to payment status page
+            return redirect('shopease:payment_status_full')
+        else:
+            messages.error(request, response.get('message', 'Failed to initiate payment'))
+            return redirect('shopease:checkout')
+            
+    return redirect('shopease:checkout')
 
-@csrf_exempt
-def mpesa_callback(request):
-    """Handle M-PESA callback and update sales counts"""
+@login_required
+def payment_status_full(request):
+    amount = request.session.get('amount')
+    transaction_id = request.session.get('mpesa_transaction_id')
+    
+    if not amount:
+        messages.error(request, 'Invalid payment amount')
+        return redirect('shopease:checkout')
+        
+    context = {
+        'amount': float(amount),
+        'transaction_id': transaction_id
+    }
+    
+    return render(request, 'payment_status_full.html', context)
+
+@login_required
+def check_payment_status(request, checkout_request_id):
     try:
-        data = json.loads(request.body)
+        logger.info(f"Checking payment status for: {checkout_request_id}")
         
-        # Extract callback data
-        result_code = data.get('Body', {}).get('stkCallback', {}).get('ResultCode')
-        checkout_request_id = data.get('Body', {}).get('stkCallback', {}).get('CheckoutRequestID')
-        
-        # Update payment record
+        # Get the payment record
         payment = MpesaPayment.objects.get(transaction_id=checkout_request_id)
         
-        if result_code == 0:
+        # Query M-PESA for status
+        mpesa_client = MpesaClient()
+        result = mpesa_client.query_payment_status(checkout_request_id)
+        logger.info(f"Payment status result: {result}")
+        
+        if result.get('success'):
+            # Update payment status
             payment.status = 'completed'
+            payment.save()
             
-            # Create and complete order
+            # Create order
             order = Order.objects.create(
-                user=payment.user,
-                payment=payment,
-                total_amount=payment.amount
+                user=request.user,
+                total_amount=payment.amount,
+                payment_method='M-PESA',
+                payment_status='completed',
+                mpesa_payment=payment
             )
             
             # Move cart items to order items
-            cart_items = CartItem.objects.filter(user=payment.user)
+            cart = Cart.objects.get(user=request.user)
+            cart_items = CartItem.objects.filter(cart=cart)
+            
             for cart_item in cart_items:
                 OrderItem.objects.create(
                     order=order,
@@ -730,21 +791,44 @@ def mpesa_callback(request):
                     price=cart_item.product.price
                 )
             
-            # Complete order (this will update sales counts)
-            order.complete_order()
-            
             # Clear the cart
             cart_items.delete()
-        else:
-            payment.status = 'failed'
             
-        payment.save()
-        
-        return JsonResponse({'success': True})
-        
+            messages.success(request, 'Payment completed successfully!')
+            
+            # Check if this is a full payment or installment
+            if not request.session.get('is_installment'):
+                return JsonResponse({
+                    'status': 'completed',
+                    'redirect_url': reverse('shopease:thank_you')
+                })
+            else:
+                return JsonResponse({
+                    'status': 'completed',
+                    'redirect_url': reverse('shopease:order_confirmation', kwargs={'order_id': order.id})
+                })
+        else:
+            # Update payment status if failed
+            payment.status = 'failed'
+            payment.save()
+            
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Payment failed. Please try again.'
+            })
+            
+    except MpesaPayment.DoesNotExist:
+        logger.error(f"Payment record not found for: {checkout_request_id}")
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Payment record not found'
+        })
     except Exception as e:
-        logger.error(f"Error processing M-PESA callback: {str(e)}")
-        return JsonResponse({'success': False})
+        logger.error(f"Error checking payment status: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Error checking payment status'
+        })
 
 @login_required
 def remove_from_cart(request, item_id):
@@ -756,11 +840,11 @@ def remove_from_cart(request, item_id):
             # Get the cart item using the cart relationship
             cart_item = CartItem.objects.get(id=item_id, cart=cart)
             cart_item.delete()
-            messages.success(request, 'Item removed from cart.')
+            messages.success(request, 'Item removed from cart successfully.')
         except CartItem.DoesNotExist:
             messages.error(request, 'Item not found in cart.')
             
-    return redirect('shopease:checkout')
+    return redirect('shopping_cart:cart_detail')
 
 @login_required
 def toggle_wishlist(request, product_id):
@@ -979,7 +1063,7 @@ def remove_cart_item(request, item_id):
         except CartItem.DoesNotExist:
             messages.error(request, 'Item not found in your cart.')
     
-    return redirect('shopease:view_cart')
+    return redirect('shopping_cart:cart_detail')
 
 @login_required
 def cart_view(request):
@@ -1029,8 +1113,8 @@ def remove_from_cart(request, item_id):
         cart = cart_item.cart
         cart_item.delete()
         
-        # Calculate new cart total
-        total = sum(item.product.price * item.quantity for item in cart.items.all())
+        # Calculate new cart total using CartItem.objects.filter instead of cart.items.all()
+        total = sum(item.product.price * item.quantity for item in CartItem.objects.filter(cart=cart))
         
         return JsonResponse({
             'success': True,
@@ -1101,26 +1185,26 @@ def select_installment_plan(request):
         
         if not cart_items.exists():
             messages.warning(request, "Your cart is empty.")
-            return redirect('shopping_cart:cart_detail')
+            return redirect('shopease:cart_detail')
         
         total = sum(item.get_total() for item in cart_items)
         
-        # Calculate installment options
+        # Calculate monthly payments for different plans
         installment_options = [
             {
                 'months': 3,
                 'monthly_payment': total / 3,
-                'total_amount': total,
+                'total_amount': total
             },
             {
                 'months': 6,
                 'monthly_payment': total / 6,
-                'total_amount': total,
+                'total_amount': total
             },
             {
                 'months': 12,
                 'monthly_payment': total / 12,
-                'total_amount': total,
+                'total_amount': total
             }
         ]
         
@@ -1134,103 +1218,105 @@ def select_installment_plan(request):
         
     except Cart.DoesNotExist:
         messages.error(request, "No active cart found.")
-        return redirect('shopping_cart:cart_detail')
+        return redirect('shopease:cart_detail')
 
 @login_required
 def process_installment_plan(request):
     if request.method == 'POST':
-        months = request.POST.get('months')
-        monthly_payment = request.POST.get('monthly_payment')
-        
-        # Store the installment plan details in the session
-        request.session['installment_number'] = 1
-        request.session['total_installments'] = int(months)
-        request.session['monthly_payment'] = monthly_payment
-        
-        # Redirect to payment form where user can enter phone number
-        return redirect('shopease:payment')  # This should show the payment form with phone input
+        try:
+            # Get cart total
+            cart = Cart.objects.get(user=request.user)
+            cart_items = CartItem.objects.filter(cart=cart)
+            total_amount = sum(item.quantity * item.product.price for item in cart_items)
+            
+            # Get and validate installment details
+            months = int(request.POST.get('months', 0))
+            if months not in [3, 6, 12]:  # Only allow valid installment periods
+                raise ValueError('Invalid installment period')
+                
+            # Calculate monthly payment
+            monthly_payment = total_amount / months
+            
+            # Store the installment plan details in the session
+            request.session['is_installment'] = True
+            request.session['installment_number'] = 1
+            request.session['total_installments'] = months
+            request.session['monthly_payment'] = str(monthly_payment)
+            request.session['total_amount'] = str(total_amount)
+            request.session['installment_months'] = months
+            
+            # Redirect to payment form where user can enter phone number
+            return redirect('shopease:payment')
+            
+        except (Cart.DoesNotExist, ValueError, TypeError) as e:
+            messages.error(request, str(e) if str(e) != '' else 'Invalid installment plan')
+            return redirect('shopease:select_installment_plan')
+        except Exception as e:
+            logger.error(f"Error processing installment plan: {str(e)}")
+            messages.error(request, 'An error occurred while processing your request')
+            return redirect('shopease:select_installment_plan')
 
     # Handle GET request
     return render(request, 'select_installment_plan.html')
 
 @login_required
-def payment(request):
-    monthly_payment = request.session.get('monthly_payment')
-    installment_number = request.session.get('installment_number')
-    total_installments = request.session.get('total_installments')
-    
-    context = {
-        'monthly_payment': monthly_payment,
-        'installment_number': installment_number,
-        'total_installments': total_installments,
-    }
-    
-    return render(request, 'payment.html', context)
-
-@login_required
 def process_payment(request):
-    print("=== Payment Debug Info ===")
-    print("Request method:", request.method)
-    print("POST data:", request.POST)
-    print("Session data:", dict(request.session))
-    
     try:
-        # Get payment details
-        phone_number = request.POST.get('phone_number')
-        monthly_payment = request.session.get('monthly_payment')
+        # Check if this is an installment payment
+        is_installment = request.session.get('is_installment', False)
         
-        print("Phone number received:", phone_number)
-        print("Monthly payment amount:", monthly_payment)
+        if is_installment:
+            try:
+                # Get monthly payment amount from session and convert to float
+                monthly_payment = float(request.session.get('monthly_payment', 0))
+                if monthly_payment <= 0:
+                    raise ValueError('Invalid monthly payment amount')
+                amount_to_pay = monthly_payment
+            except (ValueError, TypeError):
+                messages.error(request, 'Invalid monthly payment amount')
+                return redirect('shopease:payment')
+        else:
+            # For full payment, get cart total
+            cart = Cart.objects.get(user=request.user)
+            cart_items = CartItem.objects.filter(cart=cart)
+            amount_to_pay = float(sum(item.quantity * item.product.price for item in cart_items))
+            
+        # Get phone number from form
+        phone_number = request.POST.get('phone_number')
+        if not phone_number:
+            messages.error(request, 'Phone number is required')
+            return redirect('shopease:payment')
         
         # Format phone number if needed
-        if phone_number and phone_number.startswith('0'):
+        if phone_number.startswith('0'):
             phone_number = '254' + phone_number[1:]
-        elif phone_number and not phone_number.startswith('254'):
+        elif not phone_number.startswith('254'):
             phone_number = '254' + phone_number
             
-        print("Formatted phone number:", phone_number)
+        # Initialize M-PESA client and send payment request
+        mpesa_client = MpesaClient()
+        response = mpesa_client.stk_push(
+            phone_number=phone_number,
+            amount=int(amount_to_pay),
+            reference=f"ORDER-{request.user.id}-{timezone.now().strftime('%Y%m%d%H%M%S')}"
+        )
         
-        # Validate the inputs
-        if not phone_number:
-            messages.error(request, 'Please enter your phone number')
-            return redirect('shopease:payment')
-            
-        if not monthly_payment:
-            messages.error(request, 'Monthly payment amount not set')
-            return redirect('shopease:payment')
-            
-        # Initialize M-PESA client and make the request
-        try:
-            mpesa_client = MpesaClient()
-            print("M-PESA client initialized")
-            
-            payment_amount = int(float(monthly_payment))
-            print("Payment amount:", payment_amount)
-            
-            response = mpesa_client.stk_push(
-                phone_number=phone_number,
-                amount=payment_amount,
-                reference="Order Payment"
-            )
-            print("M-PESA response:", response)
-            
-        except Exception as mpesa_error:
-            print("M-PESA Error:", str(mpesa_error))
-            messages.error(request, f'M-PESA Error: {str(mpesa_error)}')
-            return redirect('shopease:payment')
-        
-        if response['success']:
-            print("Payment successful, redirecting to payment status")
-            messages.success(request, 'A payment prompt has been sent to your phone. Please enter your M-PESA PIN.')
-            return redirect('shopease:payment_status')
+        if response.get('success'):
+            if not is_installment:
+                # For full payment, redirect directly to thank you page
+                return redirect('shopease:thank_you')
+            else:
+                # For installments, show payment status
+                request.session['amount'] = str(amount_to_pay)
+                request.session['mpesa_transaction_id'] = response.get('checkout_request_id')
+                return redirect('shopease:payment_status')
         else:
-            messages.error(request, f'Payment failed: {response.get("message", "Unknown error")}')
+            messages.error(request, response.get('message', 'Failed to initiate payment'))
             return redirect('shopease:payment')
-        
+            
     except Exception as e:
-        print("Unexpected error:", str(e))
-        logger.error(f"Payment Error: {str(e)}", exc_info=True)
-        messages.error(request, 'Sorry, we could not process your payment. Please try again.')
+        logger.error(f"Error processing payment: {str(e)}", exc_info=True)
+        messages.error(request, "An error occurred while processing your payment.")
         return redirect('shopease:payment')
 
 @login_required
@@ -1246,13 +1332,11 @@ def add_to_cart_hot_deal(request, product_id):
                 cart_item.save()
             
             messages.success(request, f"{product.name} has been added to your cart.")
-            
-            # Preserve the query parameters
-            redirect_url = request.META.get('HTTP_REFERER', 'shopease:hot_deals')
-            return redirect(redirect_url)
+            return redirect('shopping_cart:cart_detail')
             
         except Product.DoesNotExist:
             messages.error(request, "Product not found.")
+            return redirect('shopping_cart:cart_detail')
         except Exception as e:
             messages.error(request, f"Error adding product to cart: {str(e)}")
     
@@ -1315,62 +1399,120 @@ def initiate_payment(request):
 @login_required
 def check_payment_status(request, checkout_request_id):
     try:
-        print(f"Checking status for checkout_request_id: {checkout_request_id}")
+        logger.info(f"Checking payment status for: {checkout_request_id}")
         
-        # Initialize M-PESA client
+        # Get the payment record
+        payment = MpesaPayment.objects.get(transaction_id=checkout_request_id)
+        
+        # Query M-PESA for status
         mpesa_client = MpesaClient()
-        
-        # Query payment status
         result = mpesa_client.query_payment_status(checkout_request_id)
-        print(f"M-PESA status query result: {result}")
+        logger.info(f"Payment status result: {result}")
         
-        if result['success']:
-            return JsonResponse({
-                'status': 'completed',
-                'message': 'Payment completed successfully'
-            })
+        if result.get('success'):
+            # Update payment status
+            payment.status = 'completed'
+            payment.save()
+            
+            # Create order
+            order = Order.objects.create(
+                user=request.user,
+                total_amount=payment.amount,
+                payment_method='M-PESA',
+                payment_status='completed',
+                mpesa_payment=payment
+            )
+            
+            # Move cart items to order items
+            cart = Cart.objects.get(user=request.user)
+            cart_items = CartItem.objects.filter(cart=cart)
+            
+            for cart_item in cart_items:
+                OrderItem.objects.create(
+                    order=order,
+                    product=cart_item.product,
+                    quantity=cart_item.quantity,
+                    price=cart_item.product.price
+                )
+            
+            # Clear the cart
+            cart_items.delete()
+            
+            messages.success(request, 'Payment completed successfully!')
+            
+            # Check if this is a full payment or installment
+            if not request.session.get('is_installment'):
+                return JsonResponse({
+                    'status': 'completed',
+                    'redirect_url': reverse('shopease:thank_you')
+                })
+            else:
+                return JsonResponse({
+                    'status': 'completed',
+                    'redirect_url': reverse('shopease:order_confirmation', kwargs={'order_id': order.id})
+                })
         else:
+            # Update payment status if failed
+            payment.status = 'failed'
+            payment.save()
+            
             return JsonResponse({
-                'status': 'pending',
-                'message': 'Payment is still processing'
+                'status': 'error',
+                'message': 'Payment failed. Please try again.'
             })
             
-    except Exception as e:
-        logger.error(f"Error checking payment status: {str(e)}")
+    except MpesaPayment.DoesNotExist:
+        logger.error(f"Payment record not found for: {checkout_request_id}")
         return JsonResponse({
             'status': 'error',
-            'message': str(e)
-        }, status=400)
+            'message': 'Payment record not found'
+        })
+    except Exception as e:
+        logger.error(f"Error checking payment status: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Error checking payment status'
+        })
 
-@login_required
 def payment_status(request):
-    # Get payment details from session
-    monthly_payment = request.session.get('monthly_payment')
-    total_amount = request.session.get('total_amount')
-    installment_number = request.session.get('installment_number', 1)  # Default to 1 if not set
-    total_installments = request.session.get('total_installments', 6)  # Default to 6 if not set
-    
-    context = {
-        'monthly_payment': monthly_payment,
-        'total_amount': total_amount,
-        'installment_number': installment_number,
-        'total_installments': total_installments,
-        'amount': monthly_payment,  # Assuming amount is the monthly payment
-    }
-    
-    # Check if payment was successful
-    payment_success = request.session.get('payment_success', False)
-    
-    if payment_success:
-        messages.success(request, 'Payment processed successfully!')
-        # Clear payment-related session data
-        request.session.pop('monthly_payment', None)
-        request.session.pop('total_amount', None)
-        request.session.pop('payment_success', None)
+    if request.session.get('is_installment'):
+        try:
+            # Get the stored payment amount and total amount
+            monthly_payment = float(request.session.get('monthly_payment', 0))
+            total_amount = float(request.session.get('total_amount', 0))
+            
+            if monthly_payment <= 0:
+                messages.error(request, 'Invalid payment amount')
+                return redirect('shopease:payment')
+                
+            context = {
+                'installment_number': request.session.get('installment_number'),
+                'total_installments': request.session.get('total_installments'),
+                'amount': monthly_payment,
+                'total_amount': total_amount
+            }
+            
+            # Log the amounts being displayed
+            logger.info(f"Payment status - Monthly: {monthly_payment}, Total: {total_amount}")
+            
+            return render(request, 'payment_status.html', context)
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error in payment status: {str(e)}")
+            messages.error(request, 'Invalid payment amount')
+            return redirect('shopease:payment')
     else:
-        messages.warning(request, 'Payment is still processing. Please wait...')
-    
-    return render(request, 'payment_status.html', context)
+        try:
+            amount = float(request.session.get('amount', 0))
+            if amount <= 0:
+                messages.error(request, 'Invalid payment amount')
+                return redirect('shopease:checkout')
+                
+            return render(request, 'payment_status_full.html', {
+                'amount': amount
+            })
+        except (ValueError, TypeError):
+            messages.error(request, 'Invalid payment amount')
+            return redirect('shopease:checkout')
 
 @login_required
 def payment_processing(request):
@@ -1407,3 +1549,110 @@ def verify_transaction(checkout_request_id):
             'success': False,
             'message': str(e)
         }
+
+@csrf_exempt
+def mpesa_callback(request):
+    """Handle M-PESA payment callbacks from Safaricom"""
+    if request.method == 'POST':
+        try:
+            # Parse the callback data
+            callback_data = json.loads(request.body)
+            logger.info(f"M-PESA Callback received: {callback_data}")
+            
+            # Extract relevant information
+            result_code = callback_data.get('ResultCode')
+            checkout_request_id = callback_data.get('CheckoutRequestID')
+            
+            try:
+                # Get the payment record
+                payment = MpesaPayment.objects.get(transaction_id=checkout_request_id)
+                
+                if result_code == '0':  # Success
+                    # Update payment status
+                    payment.status = 'completed'
+                    payment.save()
+                    
+                    # Create order if it doesn't exist
+                    if not Order.objects.filter(mpesa_payment=payment).exists():
+                        order = Order.objects.create(
+                            user=payment.user,
+                            total_amount=payment.amount,
+                            payment_method='M-PESA',
+                            payment_status='completed',
+                            mpesa_payment=payment
+                        )
+                        
+                        # Move cart items to order items
+                        cart = Cart.objects.get(user=payment.user)
+                        cart_items = CartItem.objects.filter(cart=cart)
+                        
+                        for cart_item in cart_items:
+                            OrderItem.objects.create(
+                                order=order,
+                                product=cart_item.product,
+                                quantity=cart_item.quantity,
+                                price=cart_item.product.price
+                            )
+                        
+                        # Clear the cart
+                        cart_items.delete()
+                        
+                else:  # Failed
+                    payment.status = 'failed'
+                    payment.save()
+                
+                return JsonResponse({
+                    'ResultCode': 0,
+                    'ResultDesc': 'Callback processed successfully'
+                })
+                
+            except MpesaPayment.DoesNotExist:
+                logger.error(f"Payment record not found for checkout request ID: {checkout_request_id}")
+                return JsonResponse({
+                    'ResultCode': 1,
+                    'ResultDesc': 'Payment record not found'
+                })
+                
+        except json.JSONDecodeError:
+            logger.error("Invalid JSON in callback request")
+            return JsonResponse({
+                'ResultCode': 1,
+                'ResultDesc': 'Invalid JSON data'
+            })
+        except Exception as e:
+            logger.error(f"Error processing M-PESA callback: {str(e)}", exc_info=True)
+            return JsonResponse({
+                'ResultCode': 1,
+                'ResultDesc': 'Internal server error'
+            })
+    
+    return JsonResponse({
+        'ResultCode': 1,
+        'ResultDesc': 'Invalid request method'
+    })
+
+@login_required
+def payment(request):
+    monthly_payment = request.session.get('monthly_payment')
+    installment_number = request.session.get('installment_number')
+    total_installments = request.session.get('total_installments')
+    
+    context = {
+        'monthly_payment': monthly_payment,
+        'installment_number': installment_number,
+        'total_installments': total_installments,
+    }
+    
+    return render(request, 'payment.html', context)
+
+@login_required
+def clear_cart(request):
+    """Clear all items from the user's cart"""
+    try:
+        cart = Cart.objects.get(user=request.user)
+        cart.items.all().delete()  # Delete all cart items
+        messages.success(request, 'Your cart has been cleared.')
+    except Cart.DoesNotExist:
+        messages.info(request, 'Your cart is already empty.')
+    
+    return redirect('shopping_cart:cart_detail')

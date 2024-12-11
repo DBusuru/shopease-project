@@ -26,7 +26,7 @@ def add_to_cart(request, product_id):
         cart_item.save()
     
     messages.success(request, f'{product.name} has been added to your cart.')
-    return redirect('shopease:view_cart')
+    return redirect('shopping_cart:cart_detail')
 
 @login_required
 def view_cart(request):

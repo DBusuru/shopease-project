@@ -11,7 +11,8 @@
                 <div class="card-body">
                     <div class="alert alert-info">
                         <h5>Installment {{ installment_number }} of {{ total_installments }}</h5>
-                        <p class="mb-0">Amount: Ksh {{ monthly_payment }}</p>
+                        <p class="mb-0">Monthly Payment: KES {{ monthly_payment|floatformat:2 }}</p>
+                        <small class="text-muted d-block mt-2">Total Order Amount: KES {{ total_amount|floatformat:2 }}</small>
                     </div>
 
                     <form method="POST" action="{% url 'shopease:process_payment' %}">

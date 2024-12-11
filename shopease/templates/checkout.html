@@ -25,14 +25,6 @@
                     <p>Price: KES {{ item.product.price|floatformat:2 }}</p>
                     <p>Subtotal: KES {{ item.total_price|floatformat:2 }}</p>
                 </div>
-                <div class="item-actions">
-                    <form action="{% url 'shopease:remove_from_cart' item.id %}" method="POST" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="btn btn-danger btn-sm">
-                            <i class="fa fa-trash"></i> Remove
-                        </button>
-                    </form>
-                </div>
             </div>
             {% endfor %}
         </div>
@@ -42,24 +34,26 @@
         </div>
         
         <div class="payment-options">
-            <!-- M-PESA Payment Section -->
+            <!-- M-PESA Full Payment Section -->
             <div class="payment-section">
-                <h4>Pay with M-PESA</h4>
+                <h4>Pay Full Amount with M-PESA</h4>
                 <div class="mpesa-payment">
-                    {% csrf_token %}
-                    <div class="form-group">
-                        <label for="phone_number">M-PESA Phone Number:</label>
-                        <input type="text" 
-                               class="form-control" 
-                               id="phone_number" 
-                               name="phone_number" 
-                               placeholder="254XXXXXXXXX"
-                               required>
-                        <small class="text-muted">Enter the number that will receive the M-PESA prompt</small>
-                    </div>
-                    <button type="submit" class="btn btn-primary">
-                        Pay Now with M-PESA
-                    </button>
+                    <form action="{% url 'shopease:initiate_mpesa' %}" method="POST">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="phone_number">M-PESA Phone Number:</label>
+                            <input type="text" 
+                                   class="form-control" 
+                                   id="phone_number" 
+                                   name="phone_number" 
+                                   placeholder="254XXXXXXXXX"
+                                   required>
+                            <small class="text-muted">Enter the number that will receive the M-PESA prompt</small>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg w-100 mt-3">
+                            Pay KES {{ total|floatformat:2 }} Now
+                        </button>
+                    </form>
                 </div>
             </div>
 
@@ -76,7 +70,7 @@
                         </ul>
                     </div>
                     <form action="{% url 'shopease:select_installment_plan' %}" method="GET">
-                        <button type="submit" class="btn btn-secondary">
+                        <button type="submit" class="btn btn-secondary btn-lg w-100">
                             Choose Installment Plan
                         </button>
                     </form>
@@ -102,10 +96,6 @@
 
 .item-details {
     flex-grow: 1;
-}
-
-.item-actions {
-    margin-left: 20px;
 }
 
 .payment-options {
@@ -183,102 +173,22 @@
     }
 }
 
-.alert {
-    padding: 12px 15px;
-    border-radius: 4px;
-    margin-top: 15px;
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+    transition: all 0.3s ease;
 }
 
-.alert-info {
-    background-color: #e3f2fd;
-    border-color: #90caf9;
-    color: #0d47a1;
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
 }
 
-.alert-success {
-    background-color: #e8f5e9;
-    border-color: #a5d6a7;
-    color: #1b5e20;
-}
-
-.alert-danger {
-    background-color: #ffebee;
-    border-color: #ef9a9a;
-    color: #b71c1c;
-}
-
-#payButton:disabled {
-    cursor: not-allowed;
-    opacity: 0.7;
-}
-
-.messages {
-    margin-top: 20px;
-    margin-bottom: 20px;
-}
-
-.alert {
-    margin-bottom: 10px;
-}
-
-.alert-dismissible {
-    padding-right: 3rem;
+.btn-primary:disabled {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    opacity: 0.65;
 }
 </style>
-
-{% endblock %}
-
-{% block extra_js %}
-<script>
-function initiatePayment() {
-    const phoneInput = document.getElementById('phone_number');
-    const phone = phoneInput.value.trim();
-    const payButton = document.getElementById('payButton');
-    const statusDiv = document.getElementById('paymentStatus');
-
-    // Basic phone number validation
-    if (!phone || phone.length < 10) {
-        alert('Please enter a valid phone number');
-        return;
-    }
-
-    // Show status and disable button
-    statusDiv.style.display = 'block';
-    payButton.disabled = true;
-    payButton.innerHTML = 'Processing...';
-    statusDiv.className = 'alert alert-info mt-3';
-    statusDiv.innerHTML = 'Initiating payment...';
-
-    // Create FormData object
-    const formData = new FormData();
-    formData.append('phone_number', phone);
-
-    fetch('{% url "shopease:process_payment" %}', {
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        },
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            statusDiv.innerHTML = 'Please check your phone for the M-PESA prompt...';
-            pollPaymentStatus();
-        } else {
-            payButton.disabled = false;
-            payButton.innerHTML = 'Pay Now with M-PESA';
-            statusDiv.className = 'alert alert-danger mt-3';
-            statusDiv.innerHTML = 'Payment initiation failed: ' + data.message;
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        payButton.disabled = false;
-        payButton.innerHTML = 'Pay Now with M-PESA';
-        statusDiv.className = 'alert alert-danger mt-3';
-        statusDiv.innerHTML = 'An error occurred while processing payment';
-    });
-}
-</script>
 {% endblock %}

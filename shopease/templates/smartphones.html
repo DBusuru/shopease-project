@@ -2,6 +2,102 @@
 {% load static %}
 
 {% block content %}
+<style>
+    .product-img {
+        position: relative;
+        width: 100%;
+        height: 300px;
+        overflow: hidden;
+        background: #fff;
+        padding: 15px;
+    }
+
+    .product-img img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        transition: transform 0.3s ease;
+    }
+
+    .product-img:hover img {
+        transform: scale(1.05);
+    }
+
+    .product {
+        margin-bottom: 30px;
+        border: 1px solid #e5e5e5;
+        border-radius: 5px;
+        overflow: hidden;
+        transition: box-shadow 0.3s ease;
+    }
+
+    .product:hover {
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+
+    .product-label {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        z-index: 1;
+    }
+
+    /* Pagination styles */
+    .store-pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        margin: 20px 0;
+        padding: 0;
+        list-style: none;
+    }
+
+    .store-pagination li {
+        margin: 0 5px;
+    }
+
+    .store-pagination li a,
+    .store-pagination li span {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 35px;
+        height: 35px;
+        border: 1px solid #e5e5e5;
+        border-radius: 4px;
+        color: #333;
+        text-decoration: none;
+        transition: all 0.3s ease;
+    }
+
+    .store-pagination li.active span {
+        background-color: #D10024;
+        border-color: #D10024;
+        color: #fff;
+    }
+
+    .store-pagination li a:hover {
+        background-color: #D10024;
+        border-color: #D10024;
+        color: #fff;
+    }
+
+    .store-qty {
+        font-size: 14px;
+        color: #666;
+    }
+
+    .store-filter {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-top: 1px solid #e5e5e5;
+        border-bottom: 1px solid #e5e5e5;
+        margin: 20px 0;
+    }
+</style>
+
 <!-- SECTION -->
 <div class="section">
     <!-- container -->
@@ -59,10 +155,7 @@
                 <!-- store top filter -->
                 <div class="store-filter clearfix">
                     <div class="store-sort">
-                        <h3>
-                            Smartphones
-                            <small>({{ products.paginator.count }} products)</small>
-                        </h3>
+                       
                     </div>
                 </div>
                 <!-- /store top filter -->
@@ -74,11 +167,13 @@
                     <div class="col-md-4 col-xs-6">
                         <div class="product">
                             <div class="product-img">
-                                {% if product.image %}
-                                    <img src="{{ product.image.url }}" alt="{{ product.name }}">
-                                {% else %}
-                                    <img src="{% static 'img/default-product.jpg' %}" alt="{{ product.name }}">
-                                {% endif %}
+                                <a href="{% url 'shopease:product_detail' product.id %}">
+                                    {% if product.image %}
+                                        <img src="{{ product.image.url }}" alt="{{ product.name }}">
+                                    {% else %}
+                                        <img src="{% static 'img/default-product.jpg' %}" alt="{{ product.name }}">
+                                    {% endif %}
+                                </a>
                                 {% if product.discount %}
                                 <div class="product-label">
                                     <span class="sale">-{{ product.discount }}%</span>
@@ -122,9 +217,21 @@
 
                 <!-- store bottom filter -->
                 <div class="store-filter clearfix">
+                    <div class="store-sort">
+                        <span class="store-qty">
+                            Showing {{ products.start_index }}-{{ products.end_index }} of {{ total_products }} products
+                            | Page {{ current_page }} of {{ total_pages }}
+                        </span>
+                    </div>
+                    
                     {% if products.has_other_pages %}
                     <ul class="store-pagination">
                         {% if products.has_previous %}
+                        <li>
+                            <a href="?page=1{% if selected_sort %}&sort={{ selected_sort }}{% endif %}" title="First page">
+                                <i class="fa fa-angle-double-left"></i>
+                            </a>
+                        </li>
                         <li>
                             <a href="?page={{ products.previous_page_number }}{% if selected_sort %}&sort={{ selected_sort }}{% endif %}">
                                 <i class="fa fa-angle-left"></i>
@@ -133,15 +240,24 @@
                         {% endif %}
                         
                         {% for num in products.paginator.page_range %}
-                        <li {% if products.number == num %}class="active"{% endif %}>
-                            <a href="?page={{ num }}{% if selected_sort %}&sort={{ selected_sort }}{% endif %}">{{ num }}</a>
-                        </li>
+                            {% if num == products.number %}
+                                <li class="active"><span>{{ num }}</span></li>
+                            {% elif num > products.number|add:'-3' and num < products.number|add:'3' %}
+                                <li>
+                                    <a href="?page={{ num }}{% if selected_sort %}&sort={{ selected_sort }}{% endif %}">{{ num }}</a>
+                                </li>
+                            {% endif %}
                         {% endfor %}
                         
                         {% if products.has_next %}
                         <li>
                             <a href="?page={{ products.next_page_number }}{% if selected_sort %}&sort={{ selected_sort }}{% endif %}">
                                 <i class="fa fa-angle-right"></i>
+                            </a>
+                        </li>
+                        <li>
+                            <a href="?page={{ products.paginator.num_pages }}{% if selected_sort %}&sort={{ selected_sort }}{% endif %}" title="Last page">
+                                <i class="fa fa-angle-double-right"></i>
                             </a>
                         </li>
                         {% endif %}
